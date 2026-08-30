@@ -1,0 +1,19 @@
+id: job_market_ingest
+namespace: job_market_intelligence
+description: Daily job posting ingestion from Adzuna
+
+triggers:
+  - id: daily_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 6 * * *"  # Every day at 6AM UTC
+
+tasks:
+  - id: ingest_jobs
+    type: io.kestra.plugin.scripts.python.Script
+    script: |
+      import subprocess
+      subprocess.run(["python", "ingest.py", "--pages", "2"], check=True)
+
+  - id: log_success
+    type: io.kestra.plugin.core.log.Log
+    message: "Job market ingestion complete — new postings indexed."
