@@ -1,0 +1,11 @@
+anthropic==0.40.0
+requests==2.32.3
+psycopg2-binary==2.9.9
+onnxruntime==1.19.2
+tokenizers==0.20.3
+huggingface_hub==0.25.2
+python-dotenv==1.0.1
+fastapi==0.115.0
+uvicorn==0.30.6
+streamlit==1.38.0
+pandas==2.2.2

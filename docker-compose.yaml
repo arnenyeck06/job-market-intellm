@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: job_market
+      POSTGRES_USER: jobs
+      POSTGRES_PASSWORD: jobs123
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobs -d job_market"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3002:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local
+  grafana_data:
+    driver: local
