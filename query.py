@@ -18,7 +18,9 @@ load_dotenv()
 from search.minsearch import Index
 from search.hybrid import hybrid_search
 from search.vector_store import vector_search
+from search.reranker import rerank
 from agent.rag import answer_query
+from agent.query_rewriter import rewrite_query
 
 CHUNKS_PATH = "data/chunks.json"
 
@@ -32,34 +34,45 @@ def main():
     parser.add_argument("--num-results", type=int, default=5)
     args = parser.parse_args()
 
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
     with open(CHUNKS_PATH) as f:
         chunks = json.load(f)
 
     index = Index(text_fields=["text"], keyword_fields=["state", "category", "title"])
     index.fit(chunks)
 
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    # Step 1: Query rewriting
+    rewritten = rewrite_query(args.query)
+    if rewritten != args.query:
+        print(f"[rewriter] {args.query} → {rewritten[:80]}...")
 
+    from ingestion.embedder import Embedder
+    embedder = Embedder()
+
+    # Step 2: Retrieve
     if args.search == "keyword":
         filter_dict = {}
         if args.state:
             filter_dict["state"] = args.state
-        retrieved = index.search(args.query, filter_dict=filter_dict, num_results=args.num_results)
+        retrieved = index.search(rewritten, filter_dict=filter_dict,
+                                num_results=args.num_results * 2)
     elif args.search == "vector":
-        from ingestion.embedder import Embedder
-        embedder = Embedder()
-        q_vec = embedder.encode(args.query)
-        retrieved = vector_search(q_vec, state=args.state, category=args.category, num_results=args.num_results)
+        q_vec = embedder.encode(rewritten)
+        retrieved = vector_search(q_vec, state=args.state,
+                                 category=args.category, num_results=args.num_results * 2)
     else:
-        from ingestion.embedder import Embedder
-        embedder = Embedder()
         retrieved = hybrid_search(
-            query=args.query, index=index, embedder=embedder,
-            state=args.state, category=args.category, num_results=args.num_results,
+            query=rewritten, index=index, embedder=embedder,
+            state=args.state, category=args.category,
+            num_results=args.num_results * 2,
         )
 
-    print(f"[query] Retrieved {len(retrieved)} chunks via {args.search} search.")
+    # Step 3: Re-rank
+    retrieved = rerank(rewritten, retrieved, embedder, top_n=args.num_results)
+    print(f"[query] Retrieved and re-ranked {len(retrieved)} chunks.")
 
+    # Step 4: Generate
     result = answer_query(args.query, retrieved)
 
     print("\n" + "=" * 60)
